@@ -2,22 +2,23 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_CREDENTIALS = credentials('dockerhub')
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub') // Jenkins credential ID for DockerHub
     }
 
     stages {
-   stage('Install & Test Backend') {
-    steps {
-        dir('backend') {
-            // Run npm install + test inside official Node.js image
-            docker.image('node:20').inside {
-                sh 'npm install'
-                sh 'npm test || echo "Tests skipped or failed"'
+
+        stage('Install & Test Backend') {
+            steps {
+                dir('backend') {
+                    script {
+                        docker.image('node:20').inside {
+                            sh 'npm install'
+                            sh 'npm test || echo "Tests skipped or failed"'
+                        }
+                    }
+                }
             }
         }
-    }
-}
-
 
         stage('Build Docker Images') {
             steps {
@@ -26,7 +27,7 @@ pipeline {
             }
         }
 
-        stage('Push Docker Images') {
+        stage('Push Docker Images to DockerHub') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub',
@@ -42,12 +43,13 @@ pipeline {
 
         stage('Deploy to EC2 Server') {
             steps {
-                sshagent(['ec2-key']) {
+                sshagent(['ec2-key']) { // This is the SSH key credential ID in Jenkins
                     sh '''
                         ssh -o StrictHostKeyChecking=no ec2-user@16.171.0.243 '
-                        docker pull setu3011/wanderlust-backend &&
-                        docker pull setu3011/wanderlust-frontend &&
-                        docker-compose up -d
+                            docker pull setu3011/wanderlust-backend &&
+                            docker pull setu3011/wanderlust-frontend &&
+                            docker-compose down &&
+                            docker-compose up -d
                         '
                     '''
                 }
@@ -57,12 +59,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Build & Deployment Successful!"
+            echo "✅ Build and Deployment completed successfully!"
         }
         failure {
-            echo "❌ Build or Deployment Failed!"
+            echo "❌ Build or Deployment failed. Check logs for errors."
         }
     }
 }
-
-
