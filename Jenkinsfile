@@ -2,11 +2,10 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE_NAME = 'wanderlust-backend'
-        DOCKERHUB_USERNAME = 'Setu3011'
-        EC2_HOST = '16.171.43.231'
-        DOCKERHUB_CREDENTIALS = credentials('dockerhub')             // ✅ your DockerHub credential ID
-        SSH_PRIVATE_KEY = credentials('shell-scripting-key.pem')     // ✅ your EC2 PEM key
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub')      // DockerHub credentials ID
+        SSH_PRIVATE_KEY = credentials('shell-scripting-key')  // EC2 SSH private key ID
+        IMAGE_NAME = "setu3011/wanderlust-backend"
+        EC2_HOST = "ubuntu@16.171.43.231"
     }
 
     stages {
@@ -20,14 +19,13 @@ pipeline {
             steps {
                 dir('backend') {
                     script {
-                        docker.image('node:20').inside {
+                        docker.image('node:20').inside('-u 0:0') {
                             sh '''
                                 echo "📦 Installing dependencies..."
-                                mkdir -p /tmp/npm-cache
-                                npm install --cache /tmp/npm-cache
-
-                                echo "✅ Running tests (if any)..."
-                                npm test || echo "⚠️ No tests found or skipped"
+                                npm config set cache /tmp/npm-cache --global
+                                npm install --no-audit --no-fund --unsafe-perm
+                                echo "✅ Running tests..."
+                                npm test || echo "⚠️ Tests failed, but continuing"
                             '''
                         }
                     }
@@ -35,57 +33,54 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build Docker Images') {
             steps {
-                script {
-                    sh 'docker build -t $DOCKER_IMAGE_NAME:latest .'
-                }
+                sh '''
+                    echo "🐳 Building Docker image..."
+                    docker build -t $IMAGE_NAME backend/
+                '''
             }
         }
 
-        stage('Push Docker Image to DockerHub') {
+        stage('Push Docker Images to DockerHub') {
             steps {
-                script {
-                    docker.withRegistry('https://index.docker.io/v1/', DOCKERHUB_CREDENTIALS) {
-                        sh '''
-                            docker tag $DOCKER_IMAGE_NAME:latest $DOCKERHUB_USERNAME/$DOCKER_IMAGE_NAME:latest
-                            docker push $DOCKERHUB_USERNAME/$DOCKER_IMAGE_NAME:latest
-                        '''
-                    }
-                }
+                sh '''
+                    echo "🔐 Logging into DockerHub..."
+                    echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin
+
+                    echo "📤 Pushing image to DockerHub..."
+                    docker push $IMAGE_NAME
+                '''
             }
         }
 
         stage('Deploy to EC2 Server') {
             steps {
-                script {
-                    sh '''
-                        echo "🔐 Saving EC2 key..."
-                        echo "$SSH_PRIVATE_KEY" > ec2key.pem
-                        chmod 400 ec2key.pem
+                sh '''
+                    echo "🚀 Deploying to EC2 instance..."
 
-                        echo "🚀 Deploying to EC2..."
-                        ssh -o StrictHostKeyChecking=no -i ec2key.pem ubuntu@$EC2_HOST << EOF
-                          docker pull $DOCKERHUB_USERNAME/$DOCKER_IMAGE_NAME:latest
-                          docker stop wanderlust-container || true
-                          docker rm wanderlust-container || true
-                          docker run -d --name wanderlust-container -p 3000:3000 $DOCKERHUB_USERNAME/$DOCKER_IMAGE_NAME:latest
-                        EOF
+                    echo "$SSH_PRIVATE_KEY" > ec2-key.pem
+                    chmod 400 ec2-key.pem
 
-                        echo "✅ Deployment to EC2 complete!"
-                    '''
-                }
+                    ssh -o StrictHostKeyChecking=no -i ec2-key.pem $EC2_HOST '
+                        docker pull $IMAGE_NAME &&
+                        docker stop wanderlust || true &&
+                        docker rm wanderlust || true &&
+                        docker run -d --name wanderlust -p 8000:8000 $IMAGE_NAME
+                    '
+
+                    rm ec2-key.pem
+                '''
             }
         }
     }
 
     post {
         success {
-            echo '✅ Build and Deployment Successful!'
+            echo "✅ Deployment successful!"
         }
         failure {
-            echo '❌ Build or Deployment Failed. Please check the logs.'
+            echo "❌ Build or Deployment Failed. Please check the logs."
         }
     }
 }
-
