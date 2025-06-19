@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKER_IMAGE = "setu3011/wanderlust-app"
         EC2_USER = "ubuntu"
-        EC2_IP = "16.171.43.231"
+        EC2_IP = "13.51.194.96"
         DOCKERHUB_CREDENTIALS = credentials('dockerhub')
         SSH_PRIVATE_KEY = credentials('shell-scripting-key')
     }
