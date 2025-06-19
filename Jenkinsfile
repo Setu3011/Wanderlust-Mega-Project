@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub')
         SSH_PRIVATE_KEY = credentials('shell-scripting-key')
-        EC2_IP = '13.51.194.96'
+        EC2_IP = '13.51.70.235'
     }
 
     stages {
