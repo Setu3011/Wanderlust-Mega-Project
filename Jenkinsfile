@@ -6,14 +6,18 @@ pipeline {
     }
 
     stages {
-        stage('Install & Test Backend') {
-            steps {
-                dir('backend') {
-                    sh 'npm install'
-                    sh 'npm test || echo "Tests skipped or failed"'
-                }
+   stage('Install & Test Backend') {
+    steps {
+        dir('backend') {
+            // Run npm install + test inside official Node.js image
+            docker.image('node:20').inside {
+                sh 'npm install'
+                sh 'npm test || echo "Tests skipped or failed"'
             }
         }
+    }
+}
+
 
         stage('Build Docker Images') {
             steps {
