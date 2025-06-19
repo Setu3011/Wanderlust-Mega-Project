@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKER_IMAGE_NAME = 'wanderlust-backend'
         DOCKERHUB_USERNAME = 'Setu3011'
-        EC2_HOST = '16.171.0.243'
+        EC2_HOST = '16.171.43.231'
         DOCKERHUB_CREDENTIALS = credentials('dockerhub')             // ✅ your DockerHub credential ID
         SSH_PRIVATE_KEY = credentials('shell-scripting-key.pem')     // ✅ your EC2 PEM key
     }
