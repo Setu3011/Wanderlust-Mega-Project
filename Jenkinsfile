@@ -5,12 +5,12 @@ pipeline {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub')
     }
 
-    stages {
-        stage('Clone Repository') {
-            steps {
-                git 'https://github.com/Setu3011/Wanderlust-Mega-Project.git'
-            }
-        }
+   stage('Clone Repository') {
+    steps {
+        git branch: 'main', url: 'https://github.com/Setu3011/Wanderlust-Mega-Project.git'
+    }
+}
+
 
         stage('Install & Test Backend') {
             steps {
