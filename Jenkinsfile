@@ -2,17 +2,15 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_CREDENTIALS = credentials('dockerhub')
-        SSH_PRIVATE_KEY = credentials('shell-scripting-key')
-        EC2_IP = '13.51.194.96'
-        IMAGE_NAME = 'wanderlust-backend'
-        DOCKER_USER = 'Setu3011'
+        IMAGE_NAME = "wanderlust-app"
+        DOCKER_USER = "setu3011"
+        EC2_IP = "13.51.194.96"
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/Setu3011/Wanderlust-Mega-Project.git'
+                checkout scm
             }
         }
 
@@ -20,15 +18,15 @@ pipeline {
             steps {
                 dir('backend') {
                     script {
-                        docker.image('node:20-alpine').inside('-u root:root') {
+                        docker.image('node:20').inside('-u root:root') {
                             sh '''
-                                echo 📦 Installing dependencies...
+                                echo "📦 Installing dependencies..."
                                 rm -rf node_modules package-lock.json
-                                npm cache clean --force
-                                npm install --no-audit --no-fund --unsafe-perm || {
-                                    echo "⚠️ npm install failed. Trying minimal install..."
-                                    npm install --ignore-scripts
-                                }
+                                mkdir -p /tmp/npm-cache
+                                npm config set cache /tmp/npm-cache --global
+                                npm install --no-audit --no-fund --unsafe-perm || exit 1
+                                echo "✅ Running tests..."
+                                npm test || echo "⚠️ Tests failed but continuing..."
                             '''
                         }
                     }
@@ -38,13 +36,15 @@ pipeline {
 
         stage('Build Docker Images') {
             steps {
-                sh 'docker build -t $DOCKER_USER/$IMAGE_NAME:latest ./backend'
+                script {
+                    sh 'docker build -t $DOCKER_USER/$IMAGE_NAME:latest .'
+                }
             }
         }
 
         stage('Push Docker Images to DockerHub') {
             steps {
-                withDockerRegistry([credentialsId: 'dockerhub']) {
+                withDockerRegistry([credentialsId: 'dockerhub', url: 'https://index.docker.io/v1/']) {
                     sh 'docker push $DOCKER_USER/$IMAGE_NAME:latest'
                 }
             }
@@ -52,30 +52,26 @@ pipeline {
 
         stage('Deploy to EC2 Server') {
             steps {
-                sh '''
-                    echo "🔐 Connecting to EC2 and deploying..."
-                    echo "$SSH_PRIVATE_KEY" > key.pem
-                    chmod 400 key.pem
-
-                    ssh -o StrictHostKeyChecking=no -i key.pem ec2-user@$EC2_IP << 'ENDSSH'
+                sshagent (credentials: ['shell-scripting-key']) {
+                    sh '''
+                        echo "🚀 Deploying on EC2..."
+                        ssh -o StrictHostKeyChecking=no ubuntu@$EC2_IP << EOF
+                        docker rm -f wanderlust-app || true
                         docker pull $DOCKER_USER/$IMAGE_NAME:latest
-                        docker stop backend || true
-                        docker rm backend || true
-                        docker run -d --name backend -p 8000:8000 $DOCKER_USER/$IMAGE_NAME:latest
-                    ENDSSH
-
-                    rm -f key.pem
-                '''
+                        docker run -d -p 8000:8000 --name wanderlust-app $DOCKER_USER/$IMAGE_NAME:latest
+                        EOF
+                    '''
+                }
             }
         }
     }
 
     post {
         failure {
-            echo "❌ Build or Deployment Failed. Please check the logs."
+            echo '❌ Build or Deployment Failed. Please check the logs.'
         }
         success {
-            echo "✅ Successfully deployed to http://$EC2_IP:8000"
+            echo '✅ Successfully Deployed Wanderlust App!'
         }
     }
 }
