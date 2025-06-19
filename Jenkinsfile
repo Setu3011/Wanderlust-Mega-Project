@@ -5,13 +5,7 @@ pipeline {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub')
     }
 
-   stage('Clone Repository') {
-    steps {
-        git branch: 'main', url: 'https://github.com/Setu3011/Wanderlust-Mega-Project.git'
-    }
-}
-
-
+    stages {
         stage('Install & Test Backend') {
             steps {
                 dir('backend') {
@@ -30,7 +24,11 @@ pipeline {
 
         stage('Push Docker Images') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub',
+                    usernameVariable: 'USERNAME',
+                    passwordVariable: 'PASSWORD'
+                )]) {
                     sh 'echo $PASSWORD | docker login -u $USERNAME --password-stdin'
                     sh 'docker push setu3011/wanderlust-backend'
                     sh 'docker push setu3011/wanderlust-frontend'
@@ -62,4 +60,5 @@ pipeline {
         }
     }
 }
+
 
