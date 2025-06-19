@@ -2,60 +2,77 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_CREDENTIALS = credentials('dockerhub') // Jenkins credential ID for DockerHub
+        DOCKER_IMAGE_NAME = 'wanderlust-backend'
+        DOCKERHUB_USERNAME = 'Setu3011'
+        EC2_HOST = '16.171.0.243'
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub')             // ✅ your DockerHub credential ID
+        SSH_PRIVATE_KEY = credentials('shell-scripting-key.pem')     // ✅ your EC2 PEM key
     }
 
     stages {
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+            }
+        }
 
         stage('Install & Test Backend') {
-    steps {
-        dir('backend') {
-            script {
-                docker.image('node:20').inside {
-                    sh '''
-                        mkdir -p /tmp/npm-cache
-                        npm config set cache /tmp/npm-cache --global
-                        npm install
-                        npm test || echo "Tests skipped or failed"
-                    '''
+            steps {
+                dir('backend') {
+                    script {
+                        docker.image('node:20').inside {
+                            sh '''
+                                echo "📦 Installing dependencies..."
+                                mkdir -p /tmp/npm-cache
+                                npm install --cache /tmp/npm-cache
+
+                                echo "✅ Running tests (if any)..."
+                                npm test || echo "⚠️ No tests found or skipped"
+                            '''
+                        }
+                    }
                 }
             }
         }
-    }
-}
 
-
-        stage('Build Docker Images') {
+        stage('Build Docker Image') {
             steps {
-                sh 'docker build -t setu3011/wanderlust-backend ./backend'
-                sh 'docker build -t setu3011/wanderlust-frontend ./frontend'
+                script {
+                    sh 'docker build -t $DOCKER_IMAGE_NAME:latest .'
+                }
             }
         }
 
-        stage('Push Docker Images to DockerHub') {
+        stage('Push Docker Image to DockerHub') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub',
-                    usernameVariable: 'USERNAME',
-                    passwordVariable: 'PASSWORD'
-                )]) {
-                    sh 'echo $PASSWORD | docker login -u $USERNAME --password-stdin'
-                    sh 'docker push setu3011/wanderlust-backend'
-                    sh 'docker push setu3011/wanderlust-frontend'
+                script {
+                    docker.withRegistry('https://index.docker.io/v1/', DOCKERHUB_CREDENTIALS) {
+                        sh '''
+                            docker tag $DOCKER_IMAGE_NAME:latest $DOCKERHUB_USERNAME/$DOCKER_IMAGE_NAME:latest
+                            docker push $DOCKERHUB_USERNAME/$DOCKER_IMAGE_NAME:latest
+                        '''
+                    }
                 }
             }
         }
 
         stage('Deploy to EC2 Server') {
             steps {
-                sshagent(['ec2-key']) { // This is the SSH key credential ID in Jenkins
+                script {
                     sh '''
-                        ssh -o StrictHostKeyChecking=no ec2-user@16.171.0.243 '
-                            docker pull setu3011/wanderlust-backend &&
-                            docker pull setu3011/wanderlust-frontend &&
-                            docker-compose down &&
-                            docker-compose up -d
-                        '
+                        echo "🔐 Saving EC2 key..."
+                        echo "$SSH_PRIVATE_KEY" > ec2key.pem
+                        chmod 400 ec2key.pem
+
+                        echo "🚀 Deploying to EC2..."
+                        ssh -o StrictHostKeyChecking=no -i ec2key.pem ubuntu@$EC2_HOST << EOF
+                          docker pull $DOCKERHUB_USERNAME/$DOCKER_IMAGE_NAME:latest
+                          docker stop wanderlust-container || true
+                          docker rm wanderlust-container || true
+                          docker run -d --name wanderlust-container -p 3000:3000 $DOCKERHUB_USERNAME/$DOCKER_IMAGE_NAME:latest
+                        EOF
+
+                        echo "✅ Deployment to EC2 complete!"
                     '''
                 }
             }
@@ -64,10 +81,11 @@ pipeline {
 
     post {
         success {
-            echo "✅ Build and Deployment completed successfully!"
+            echo '✅ Build and Deployment Successful!'
         }
         failure {
-            echo "❌ Build or Deployment failed. Check logs for errors."
+            echo '❌ Build or Deployment Failed. Please check the logs.'
         }
     }
 }
+
