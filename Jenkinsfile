@@ -8,17 +8,22 @@ pipeline {
     stages {
 
         stage('Install & Test Backend') {
-            steps {
-                dir('backend') {
-                    script {
-                        docker.image('node:20').inside {
-                            sh 'npm install'
-                            sh 'npm test || echo "Tests skipped or failed"'
-                        }
-                    }
+    steps {
+        dir('backend') {
+            script {
+                docker.image('node:20').inside {
+                    sh '''
+                        mkdir -p /tmp/npm-cache
+                        npm config set cache /tmp/npm-cache --global
+                        npm install
+                        npm test || echo "Tests skipped or failed"
+                    '''
                 }
             }
         }
+    }
+}
+
 
         stage('Build Docker Images') {
             steps {
