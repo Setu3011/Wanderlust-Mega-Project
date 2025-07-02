@@ -1,31 +1,24 @@
-# Stage 1
-FROM node:21 AS backend-builder
+# Stage 1: Build
+FROM node:21-alpine AS builder
 
-# setup the working dir
 WORKDIR /app
 
-# code
+COPY package*.json ./
+RUN npm install --only=production
+
 COPY . .
 
-# packages install
-RUN npm i
+# Stage 2: Run
+FROM node:21-alpine
 
-# tests
-RUN npm run test
-
-# Stage 2
-FROM node:21-slim
-
-# setup the working dir
 WORKDIR /app
 
-# copy the above stage as compressed
-COPY --from=backend-builder /app .
+COPY --from=builder /app /app
 
 COPY .env.docker .env
 
-# Port
 EXPOSE 8080
 
-# App
-CMD ["npm", "start"]
+# Use node instead of nodemon for production
+CMD ["node", "server.js"]
+

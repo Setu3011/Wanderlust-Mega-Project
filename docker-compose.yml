@@ -1,12 +1,29 @@
 version: "3.8"
+
 services:
   mongodb:
     container_name: mongo-service
-    image: mongo:latest
+    image: mongo:6.0.13
+    restart: unless-stopped
     volumes:
-      - ./backend/data:/data
+      - mongo-data:/data/db
     ports:
       - "27017:27017"
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+
+  redis:
+    container_name: redis-service
+    image: redis:7.0.5-alpine
+    restart: unless-stopped
+    expose:
+      - 6379
+    deploy:
+      resources:
+        limits:
+          memory: 100M
 
   backend:
     container_name: backend
@@ -17,23 +34,26 @@ services:
       - "31100:8080"
     depends_on:
       - mongodb
+      - redis
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 250M
 
   frontend:
     container_name: frontend
     build: ./frontend
-    env_file:
-      - ./frontend/.env.docker
     ports:
-      - "5173:5173"
-
-  redis:
-    container_name: redis-service
-    restart: unless-stopped
-    image: redis:7.0.5-alpine 
-    expose:
-        - 6379
+      - "5173:80"
     depends_on:
-      - mongodb
+      - backend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 250M
 
 volumes:
-  data:
+  mongo-data:
+
